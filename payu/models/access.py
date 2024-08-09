@@ -34,6 +34,9 @@ class Access(Model):
 
         self.model_type = 'access'
 
+        self.cpl_keys = {'cice': ('input_ice.nml', 'coupling', 'runtime0'),
+                         'matm': ('input_atm.nml', 'coupling', 'truntime0')}
+
         for model in self.expt.models:
             if model.model_type == 'cice' or model.model_type == 'cice5':
                 model.config_files = ['cice_in.nml',
@@ -56,8 +59,6 @@ class Access(Model):
         if not self.top_level_model:
             return
 
-        cpl_keys = {'cice': ('input_ice.nml', 'coupling', 'runtime0'),
-                    'matm': ('input_atm.nml', 'coupling', 'truntime0')}
 
         # Keep track of this in order to set the oasis runtime.
         run_runtime = 0
@@ -91,7 +92,7 @@ class Access(Model):
                 # Update the supplemental OASIS namelists
 
                 # cpl_nml is the coupling namelist located in the control directory
-                cpl_fname, cpl_group, runtime0_key = cpl_keys[model.model_type]
+                cpl_fname, cpl_group, runtime0_key = self.cpl_keys[model.model_type]
                 cpl_fpath = os.path.join(model.work_path, cpl_fname)
                 cpl_nml = f90nml.read(cpl_fpath)
 
@@ -109,9 +110,11 @@ class Access(Model):
                     # Read the start date from the restart date namelist
                     start_date_fpath = os.path.join(
                         model.prior_restart_path,
-                        "start_date.nml"
+                        "restart_date.nml"
                     )
+                    
 
+                    # TODO: Do we want backwards compatibility?
                     try:
                         start_date_nml = f90nml.read(start_date_fpath)[cpl_group]
                     except FileNotFoundError:
@@ -121,21 +124,21 @@ class Access(Model):
                             file=sys.stderr
                         )
                         raise
-
-                    NEW_start_date = cal.int_to_date(start_date_nml["inidate"])
+                    
+                    # Experiment initialisation date
                     init_date = cal.int_to_date(
                         start_date_nml["init_date"]
                     )
-
-                    # Calculate the number of seconds between the initialisation and 
-                    # run start date to for the runtime0 field.
-                    NEW_previous_runtime = cal.seconds_between_dates(
-                        NEW_start_date,
-                        init_date
+                    # Total time previously simulated
+                    total_runtime = int(
+                        start_date_nml[runtime0_key] + start_date_nml['runtime']
                     )
+                    run_start_date = cal.date_plus_seconds(init_date,
+                                                           total_runtime,
+                                                           caltype)
 
-                    # TODO: Are we ok with breaking backwards compatability?
-                    # It keeps the code a lot simpler if we are.
+                    # TODO: If we want backwards compatibility make 
+                    # necessary adjustments.
 
                     # prior_cpl_fpath = os.path.join(model.prior_restart_path,
                     #                                cpl_fname)
@@ -165,15 +168,6 @@ class Access(Model):
                     #     else:
                     #         raise
 
-
-                    # The total time in seconds since the beginning of
-                    # the experiment.
-                    total_runtime = int(start_date_nml[runtime0_key] +
-                                        start_date_nml['runtime'])
-                    run_start_date = cal.date_plus_seconds(init_date,
-                                                           total_runtime,
-                                                           caltype)
-
                 else:
                     init_date = cal.int_to_date(cpl_nml[cpl_group]['init_date'])
                     total_runtime = 0
@@ -189,24 +183,8 @@ class Access(Model):
                         self.expt.runtime['days'],
                         self.expt.runtime.get('seconds', 0),
                         caltype)
-                    NEW_run_runtime = cal.runtime_from_date(
-                        NEW_start_date,
-                        self.expt.runtime['years'],
-                        self.expt.runtime['months'],
-                        self.expt.runtime['days'],
-                        self.expt.runtime.get('seconds', 0),
-                        caltype
-                    )
                 else:
                     run_runtime = cpl_nml[cpl_group]['runtime']
-
-                # Sanity checks during development. Ensure that the new calculations
-                # would write the same init_date, runtime, and runtime0 as the old 
-                # calculations. 
-                # TODO: Remove when satisfied changes are working
-                assert NEW_start_date == run_start_date
-                assert NEW_run_runtime == run_runtime 
-                assert NEW_previous_runtime == total_runtime 
 
                 # Now write out new run start date and total runtime.
                 cpl_nml[cpl_group]['inidate'] = cal.date_to_int(run_start_date)
@@ -266,6 +244,42 @@ class Access(Model):
 
                     if os.path.exists(f_src):
                         shutil.copy2(f_src, f_dst)
+            
+            if model.model_type in ('cice', 'matm'):
+                
+                # Write the end date to the restart date namelist
+                cpl_fname, cpl_group, runtime0_key = self.cpl_keys[model.model_type]
+                completed_run_cpl_nml_path = os.path.join(model.work_path, cpl_fname)
+                completed_run_cpl_nml = f90nml.read(
+                    completed_run_cpl_nml_path
+                    )[cpl_group]
+                
+                completed_run_start_date = cal.int_to_date(
+                    completed_run_cpl_nml["inidate"])
+                
+                completed_run_runtime = completed_run_cpl_nml["runtime"]
+                caltype = completed_run_cpl_nml['caltype']
+
+                completed_run_end_date = cal.date_plus_seconds(
+                    completed_run_start_date,
+                    completed_run_runtime,
+                    caltype)
+                
+                end_date_nml = {
+                    cpl_group: {
+                        # Experiment initialisation date
+                        "init_date": completed_run_cpl_nml["init_date"],
+                        # Simulated time prior to completed simulation
+                        runtime0_key: completed_run_cpl_nml[runtime0_key],
+                        # Duration of completed simulation
+                        "runtime": completed_run_cpl_nml["runtime"]
+                    }
+                }
+                f90nml.write(
+                    end_date_nml, 
+                    os.path.join(model.restart_path, "restart_date.nml"),
+                    force = True # Overwrite copy from previous restart
+                )
 
             if model.model_type == 'cice5':
                 cice5 = model

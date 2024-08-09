@@ -90,68 +90,6 @@ def calculate_leapdays(init_date, final_date):
     return datetime.timedelta(days=leap_days)
 
 
-# TODO: The caltype logic could probably be simplified if we switched
-# to using just a string as the caltype input. Might require reworking of other 
-# functions for consistency.
-def seconds_between_dates(start_date, end_date, caltype_int):
-    """
-    Calculate the number of seconds between two datetime objects
-    with a specified calender type by using cftime datetime objects
-    as intermiaries.
-
-    Parameters
-    ----------
-    start_date: datetime.date 
-    end_date: datetime.date
-    caltype: Integer, either GREGORIAN or NOLEAP
-
-    Returns
-    -------
-    seconds: Number of seconds between start_date and end_date.
-    """
-    # Get the cftime string corresponding to the caltype integer
-    
-    #TODO: I think it's confusing that GREGORIAN means proleptic gregorian
-    if caltype_int == GREGORIAN:
-        calendar_str = "proleptic_gregorian"
-    elif caltype_int == NOLEAP:
-        calendar_str = "noleap"
-    else:
-        raise ValueError(f"Unrecognized caltype integer {caltype_int}")
-
-    delta = datetime_to_cftime(end_date, calendar_str) - datetime_to_cftime(start_date, calendar_str)
-
-    return delta.total_seconds()
-        
-
-# TODO: Is there an inbuilt way to do this?
-def datetime_to_cftime(date, calendar):
-    """
-    Convert a datetime.datetime object to a cftime.datetime object which 
-    has the same year, month, day, hour, minute, second values. 
-
-    Parameters
-    ----------
-    date: datetime.date object
-    calendar: string specifying a valid cftime calendar type
-
-    Returns
-    -------
-    date_cf: cftime.datetime object.
-    """
-    date_cf = cftime.datetime(
-        year = date.year,
-        month = date.month,
-        day = date.day,
-        hour = date.hour,
-        minute = date.minute,
-        second = date.second,
-        calendar = calendar
-    )
-
-    return date_cf
-
-
 def add_year_start_offset_to_datetime(initial_dt, n):
     """Return a cftime datetime at the start of the year, that is n years
     from the initial datetime"""
