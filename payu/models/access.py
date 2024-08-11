@@ -216,6 +216,21 @@ class Access(Model):
                     if os.path.exists(f_src):
                         shutil.copy2(f_src, f_dst)
 
+                # Delete all iceout log files except root PE from the 
+                # work path
+                logfile_prefix = 'iceout'
+                logfiles = [ 
+                    filename for filename in os.listdir(model.work_path)
+                    if filename.startswith(logfile_prefix)
+                ]
+                sorted_logfiles = sorted(
+                    logfiles,
+                    key = lambda name: int(name.removeprefix(logfile_prefix))
+                )
+                if len(sorted_logfiles) > 1:
+                    for file in sorted_logfiles[1:]:
+                        os.remove(os.path.join(model.work_path, file))
+
             if model.model_type == 'cice5':
                 cice5 = model
             elif model.model_type == 'mom':
