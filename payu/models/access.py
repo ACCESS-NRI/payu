@@ -215,6 +215,23 @@ class Access(Model):
 
                     if os.path.exists(f_src):
                         shutil.copy2(f_src, f_dst)
+                
+                # Keep only the iced.YYYYMMDD restart file specified
+                # in the ice.restart_file pointer file.
+                res_ptr_path = os.path.join(model.restart_path, 'ice.restart_file')
+                with open(res_ptr_path) as f:
+                    res_name = os.path.basename(f.read()).strip()
+
+                assert os.path.exists(os.path.join(model.restart_path, res_name))
+                print(f"SPENCER: Latest restart {os.path.join(model.restart_path, res_name)}")
+
+                for f in os.listdir(model.restart_path):
+                    if f.startswith('iced.'):
+                        if f == res_name:
+                            continue
+                        print(f"SPENCER: deleting {os.path.join(model.restart_path, f)}")
+                        os.remove(os.path.join(model.restart_path, f))
+
 
             if model.model_type == 'cice5':
                 cice5 = model
