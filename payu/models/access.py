@@ -223,13 +223,11 @@ class Access(Model):
                     res_name = os.path.basename(f.read()).strip()
 
                 assert os.path.exists(os.path.join(model.restart_path, res_name))
-                print(f"SPENCER: Latest restart {os.path.join(model.restart_path, res_name)}")
 
                 for f in os.listdir(model.restart_path):
                     if f.startswith('iced.'):
                         if f == res_name:
                             continue
-                        print(f"SPENCER: deleting {os.path.join(model.restart_path, f)}")
                         os.remove(os.path.join(model.restart_path, f))
 
 
