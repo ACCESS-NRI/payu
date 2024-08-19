@@ -17,6 +17,7 @@ from importlib.util import spec_from_loader, module_from_spec
 import os
 import shutil
 import string
+import warnings
 
 # Extensions
 import f90nml
@@ -110,28 +111,45 @@ class UnifiedModel(Model):
         pass
 
     def setup(self):
-        # Raise a deprecation error if the um_env.yaml file is not found
+        # Raise a deprecation warning if the um_env.yaml file is not found
         # This could be removed down the line, once older configurations 
         # have swapped to um_env.yaml files.
         deprecated_um_env = os.path.join(self.control_path, 'um_env.py')
         new_um_env = os.path.join(self.control_path, 'um_env.yaml')
-        if (not os.path.isfile(new_um_env)) and os.path.isfile(deprecated_um_env):
-            raise FutureWarning(
+        use_deprecated_um_env = ((not os.path.isfile(new_um_env))
+                                 and os.path.isfile(deprecated_um_env))
+        if use_deprecated_um_env:
+            warnings.warn(
                 (
-                    "The `um_env.py` configuration file has been deprecated and "
-                    "should be relplaced with a yaml file. "
+                    "The `um_env.py` configuration file will be deprecated and "
+                    "should be replaced with a yaml file. "
                     "Convert `um_env.py` to `um_env.yaml` using "
                     "https://github.com/ACCESS-NRI/esm1.5-scripts/blob/main/config-files/UM/um_env_to_yaml.py"
-                )
-            ) 
+                ), FutureWarning
+            )
+            self.config_files.remove('um_env.yaml')
+            self.config_files.append('um_env.py')
+
 
         # Commence normal setup
         super(UnifiedModel, self).setup()
 
         # Set up environment variables needed to run UM.
-        um_env_path = os.path.join(self.control_path, 'um_env.yaml')
-        with open(um_env_path, 'r') as um_env_yaml:
-            um_env_vars = yaml.safe_load(um_env_yaml)
+        if use_deprecated_um_env:
+            # This can be removed once um_env.py has been removed
+            loader = SourceFileLoader(
+                'um_env',
+                os.path.join(self.control_path, 'um_env.py')
+            )
+            um_env = module_from_spec(
+                spec_from_loader(loader.name, loader)
+            )
+            loader.exec_module(um_env)
+            um_env_vars = um_env.vars
+        else:
+            um_env_path = os.path.join(self.control_path, 'um_env.yaml')
+            with open(um_env_path, 'r') as um_env_yaml:
+                um_env_vars = yaml.safe_load(um_env_yaml)
 
 
         # Stage the UM restart file.
