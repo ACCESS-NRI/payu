@@ -700,6 +700,19 @@ class Experiment(object):
         with open(self.job_fname, 'w') as file:
             file.write(yaml.dump(info, default_flow_style=False))
 
+        # TODO: Could add a function (? tracking_info(info, self.metadata.read_file()), that:
+        # - Extracts fields from info dictionary (or removes any that contain userid?):
+        #       payu-specific: all extra info apart from PAYU_CONTROL_DIR as that might contain userid
+        #           PAYU_RUN_ID, PAYU_CURRENT_RUN, PAYU_JOB_STATUS, PAYU_N_RUNS, PAYU_START_TIME, PAYU_FINISH_TIME, PAYU_WALLTIME
+        #       pbs-specific:
+        #           Job_ID, project
+        # - Gets version of current running payu:
+        #       payu.__version__
+        # - Dictionary of metadata fields from file (could use all metadata fields?)
+        #       At least experiment_uuid, parent_experiment, name, model
+        # ? Resource usage stats? There's resources_used.* fields in info - but that
+        # won't be a final value while PBS job is still running - but it could be useful for a lower approximation
+
         # Remove any empty output files (e.g. logs)
         for fname in os.listdir(self.work_path):
             fpath = os.path.join(self.work_path, fname)
