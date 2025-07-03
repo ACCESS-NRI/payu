@@ -13,6 +13,7 @@ from test.common import write_config
 from test.common import make_all_files
 from test.common import config_path
 
+from test.models.test_cice5 import prior_restart_dir_cice5, RESTART_PATH
 verbose = True
 
 
@@ -150,3 +151,10 @@ def test_esm1p6_patch_optional_config_files(um_only_ctrl_dir,
         set(esm1p6_um_model.optional_config_files) ==
         set(um_standalone_model.optional_config_files).union(expected_files)
     )
+
+@pytest.mark.parametrize("prior_restart_dir_cice5",
+                         [[1,1,1,0], [1,2,2,0]] 
+                         indirect=True)
+def test_cice5_resdir(prior_restart_dir_cice5):
+    print("SPENCER: cice5 restart dir")
+    print(os.listdir(RESTART_PATH))
