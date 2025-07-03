@@ -15,6 +15,7 @@ import os
 import re
 import shutil
 import sys
+import warnings
 
 # Extensions
 import f90nml
@@ -37,6 +38,8 @@ class AccessEsm1p6(Model):
         self.model_type = 'access-esm1.6'
 
         for model in self.expt.models:
+            model.run_start_date = None
+
             if model.model_type == 'cice' or model.model_type == 'cice5':
                 model.config_files = ['cice_in.nml',
                                       'input_ice.nml']
@@ -79,6 +82,12 @@ class AccessEsm1p6(Model):
     def setup(self):
         if not self.top_level_model:
             return
+        # ESM1.6 always starts from a restart.
+        if not self.expt.prior_restart_path:
+            raise RuntimeError(
+                "No prior restart path set. ACCESS-ESM1.6 must "
+                "start from a prior restart."
+                )
 
         # Keep track of this in order to set the oasis runtime.
         run_runtime = 0
@@ -150,21 +159,27 @@ class AccessEsm1p6(Model):
                         )
 
                         # Start date of new run
-                        run_start_date = cal.int_to_date(
+                        run_start_date_dt = cal.int_to_date(
                             start_date_nml[model.inidate_key]
+                        )
+                        model.run_start_date = cal.date_to_cftime(
+                            run_start_date_dt,
+                            cal.CALNAME[model.caltype]
                         )
 
                     elif model.model_type == 'cice5':
                         # get_restart_datetime returns cftime objects, 
                         # convert to datetime
-                        run_start_date = datetime.fromisoformat(
+                        model.run_start_date = model.get_restart_datetime()
+
+                        run_start_date_dt = datetime.fromisoformat(
                             model.get_restart_datetime().isoformat()
                         ).date()
 
                     # run_start_date must be after initialisation date
-                    if run_start_date < init_date:
+                    if run_start_date_dt < init_date:
                         msg = (
-                            f"Restart date ({run_start_date}) in "
+                            f"Restart date ({run_start_date_dt}) in "
                             f"cice restart ('iced') must not be "
                             "before initialisation date ({INIT_DATE}). "
                         )
@@ -175,7 +190,7 @@ class AccessEsm1p6(Model):
                     # to use for the runtime0 field.
                     previous_runtime = cal.seconds_between_dates(
                         init_date,
-                        run_start_date,
+                        run_start_date_dt,
                         model.caltype
                     )
 
@@ -184,12 +199,12 @@ class AccessEsm1p6(Model):
                 else:
                     previous_runtime = 0
                     cpl_group['jobnum'] = 1
-                    run_start_date = init_date
+                    model.run_start_date = init_date
 
                 # Set runtime for this run. 
                 if self.expt.runtime:
                     run_runtime = cal.runtime_from_date(
-                        run_start_date,
+                        run_start_date_dt,
                         self.expt.runtime['years'],
                         self.expt.runtime['months'],
                         self.expt.runtime['days'],
@@ -203,7 +218,7 @@ class AccessEsm1p6(Model):
                 # Now write out new run start date and total runtime into the
                 # work directory namelist.
                 cpl_group[model.init_date_key] = cal.date_to_int(init_date)
-                cpl_group[model.inidate_key] = cal.date_to_int(run_start_date)
+                cpl_group[model.inidate_key] = cal.date_to_int(run_start_date_dt)
                 cpl_group[model.runtime0_key] = previous_runtime
                 cpl_group[model.runtime_key] = int(run_runtime)
 
@@ -216,7 +231,7 @@ class AccessEsm1p6(Model):
 
                 if  model.prior_restart_path and model.model_type == 'cice' :
                     # Set up and check the cice restart files.
-                    model.overwrite_restart_ptr(run_start_date,
+                    model.overwrite_restart_ptr(run_start_date_dt,
                                                 previous_runtime,
                                                 start_date_fpath)
 
@@ -235,6 +250,8 @@ class AccessEsm1p6(Model):
 
                 with open(namcouple, 'w') as f:
                     f.write(s)
+
+        self.check_restart_date_consistency()
 
     def archive(self):
         if not self.top_level_model:
@@ -309,6 +326,38 @@ class AccessEsm1p6(Model):
 
         return self.get_restart_datetime_using_submodel(restart_path,
                                                         model_types)
+
+    def check_restart_date_consistency(self):
+        """Check submodel restart dates for consistency."""
+        for model in self.expt.models:
+            if model.run_start_date is not None:
+                # Start date calculated elsewhere
+                continue
+            if not model.prior_restart_path:
+                # TODO: How to handle this case?
+                warnings.warn("Skipping restart date consistency check for "
+                              f"{model.model_type} submodel:\n"
+                              "No prior restart path.")
+                continue
+            try:
+                model.run_start_date = model.get_restart_datetime()
+            except NotImplementedError:
+                warnings.warn("Skipping restart date consistency check for "
+                              f"{model.model_type} submodel:\n"
+                              "No get_restart_datetime method.")
+
+        # Check consistency
+        start_dates = set(model.run_start_date
+                          for model in self.expt.models
+                          if model.run_start_date is not None)
+        if len(start_dates) != 1:
+            msg = (
+                "Inconsistent dates in submodel restart files:"
+                "\n".join([f"{model.model_type}: {model.run_start_date}"
+                           for model in self.expt.models
+                           if model.run_start_date is not None])
+            )
+            raise RuntimeError(msg)
 
     def set_model_pathnames(self):
         pass
