@@ -330,6 +330,9 @@ class AccessEsm1p6(Model):
     def check_restart_date_consistency(self):
         """Check submodel restart dates for consistency."""
         for model in self.expt.models:
+            if model.model_type == self.model_type:
+                # access-esm1.6 driver model has no restart files
+                continue
             if model.run_start_date is not None:
                 # Start date calculated elsewhere
                 continue
@@ -340,7 +343,7 @@ class AccessEsm1p6(Model):
                               "No prior restart path.")
                 continue
             try:
-                model.run_start_date = model.get_restart_datetime()
+                model.run_start_date = model.get_restart_datetime(model.prior_restart_path)
             except NotImplementedError:
                 warnings.warn("Skipping restart date consistency check for "
                               f"{model.model_type} submodel:\n"
@@ -352,7 +355,7 @@ class AccessEsm1p6(Model):
                           if model.run_start_date is not None)
         if len(start_dates) != 1:
             msg = (
-                "Inconsistent dates in submodel restart files:"
+                "Inconsistent dates in submodel restart files:\n" +
                 "\n".join([f"{model.model_type}: {model.run_start_date}"
                            for model in self.expt.models
                            if model.run_start_date is not None])
