@@ -1,19 +1,25 @@
 import copy
+import datetime
 import os
 import shutil
 
+import cftime
+import f90nml
 import pytest
 
 import payu
 
 from test.common import cd, expt_workdir
-from test.common import tmpdir, ctrldir, labdir, workdir, archive_dir
+from test.common import tmpdir, ctrldir, labdir, workdir, expt_archive_dir, ctrldir_basename
 from test.common import config as config_orig
 from test.common import write_config
 from test.common import make_all_files
 from test.common import config_path
+from test.common import list_expt_archive_dirs, remove_expt_archive_dirs
 
-from test.models.test_cice5 import prior_restart_dir_cice5, RESTART_PATH
+from test.models.test_cice5 import make_cice5_restart_dir
+from test.models.test_mom_mixin import make_ocean_restart_dir
+from test.models.test_um import make_atmosphere_restart_dir
 verbose = True
 
 
@@ -34,10 +40,39 @@ def setup_module(module):
         tmpdir.mkdir()
         labdir.mkdir()
         ctrldir.mkdir()
-        archive_dir.mkdir()
+        expt_archive_dir.mkdir(parents=True)
         make_all_files()
     except Exception as e:
         print(e)
+
+CICE5_CONFIG = {
+    "laboratory": "lab",
+    "jobname": "testrun",
+    "model": "access-esm1.6",
+    "submodels": [{"name": "atmosphere",
+                  "model": "um"},
+                  {"name": "ocean",
+                  "model": "mom"},
+                  {"name": "ice",
+                  "model": "cice5"}],
+    "exe": "test.exe",
+    "experiment": ctrldir_basename,
+    "metadata": {"enable": False}
+}
+
+@pytest.fixture
+def config(request):
+    """
+    Write a specified dictionary to config.yaml.
+    Used to allow writing configs with and without
+    restarts.
+    """
+    config = request.param
+    write_config(config, config_path)
+
+    yield config_path
+
+    os.remove(config_path)
 
 
 def teardown_module(module):
@@ -71,6 +106,14 @@ def empty_workdir():
         pass
     workdir.unlink()
 
+@pytest.fixture(autouse=True)
+def teardown():
+    # Run test
+    yield
+
+    # Remove any created restart files
+    remove_expt_archive_dirs(type='restart')
+
 
 @pytest.fixture
 def esm1p6_um_only_config():
@@ -90,6 +133,39 @@ def esm1p6_um_only_config():
     # Teardown
     os.remove(config_path)
 
+@pytest.fixture
+def ice_control_directory():
+    # Make a cice control subdirectory
+    ice_ctrl_dir = ctrldir / "ice"
+    ice_ctrl_dir.mkdir()
+
+    # Run test
+    yield ice_ctrl_dir
+
+    # Teardown
+    shutil.rmtree(ice_ctrl_dir)
+
+
+@pytest.fixture
+def fake_cice_in(ice_control_directory):
+    # Create a fake cice_in.nml file. This is irrelevant for the tests,
+    # however is required to exist for the experiment initialisation.
+    fake_cice_in_nml = {
+        "setup_nml": {
+            "restart_dir": "",
+            "history_dir": ""
+        },
+        "grid_nml": {
+            "grid_file": "",
+            "kmt_file": ""
+        }
+    }
+    fake_cice_in_path = ice_control_directory / "cice_in.nml"
+    f90nml.write(fake_cice_in_nml, fake_cice_in_path)
+
+    yield fake_cice_in_path
+
+    # Teardown handled by ice_control_directory fixture
 
 @pytest.fixture
 def um_only_ctrl_dir():
@@ -152,9 +228,37 @@ def test_esm1p6_patch_optional_config_files(um_only_ctrl_dir,
         set(um_standalone_model.optional_config_files).union(expected_files)
     )
 
-@pytest.mark.parametrize("prior_restart_dir_cice5",
-                         [[1,1,1,0], [1,2,2,0]] 
-                         indirect=True)
-def test_cice5_resdir(prior_restart_dir_cice5):
-    print("SPENCER: cice5 restart dir")
-    print(os.listdir(RESTART_PATH))
+@pytest.mark.parametrize("config",
+                        [CICE5_CONFIG],
+                        indirect=True)
+@pytest.mark.parametrize("run_dt",
+    [cftime.datetime(1, 1, 1, calendar="proleptic_gregorian"),
+     cftime.datetime(999, 1, 1, calendar="proleptic_gregorian")]
+)
+def test_resdate_consistency(run_dt, config, fake_cice_in):
+    """
+    Test that the ESM1.6 consistency date check passes when
+    submodels use the same restart dates.
+    """
+    # Setup the restart files for each submodel
+    make_cice5_restart_dir(run_dt,
+                           additional_path="ice")
+    start_dt = cftime.datetime(1900, 1, 1, calendar="proleptic_gregorian")
+
+    make_ocean_restart_dir(start_dt, run_dt,  additional_path="ocean")
+    make_atmosphere_restart_dir("um.res.yaml",
+                                datetime.date(run_dt.year, run_dt.month, run_dt.day),
+                                additional_path="atmosphere")
+
+    # Initialise the experiment
+    with cd(ctrldir):
+        lab = payu.laboratory.Laboratory(lab_path=str(labdir))
+        expt = payu.experiment.Experiment(lab, reproduce=False)
+
+    # Set cice5 calendar type to avoid needing to run model setup
+    for model in expt.models:
+        if model.model_type == "cice5":
+            model.cal_str = "proleptic_gregorian"
+
+    expt.model.check_restart_date_consistency()
+    print("ALL OK")
