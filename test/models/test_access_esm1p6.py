@@ -139,22 +139,24 @@ def esm1p6_um_only_config():
 
 
 @pytest.fixture
-def ice_control_directory():
-    # Make a cice control subdirectory
-    ice_ctrl_dir = ctrldir / "ice"
-    ice_ctrl_dir.mkdir()
+def submodel_ctrl_dirs():
+    # Make control subdirectories for each submodel
+    components = ["atmosphere", "ocean", "ice"]
+    for component in components:
+        (ctrldir / component).mkdir()
 
     # Run test
-    yield ice_ctrl_dir
+    yield
 
     # Teardown
-    shutil.rmtree(ice_ctrl_dir)
+    for component in components:
+        shutil.rmtree(ctrldir / component)
 
 
 @pytest.fixture
-def default_input_ice(ice_control_directory):
+def default_input_ice(submodel_ctrl_dirs):
     # Create base input_ice.nml namelist as needed for setup
-    ctrl_input_ice_path = ice_control_directory / INPUT_ICE_FNAME
+    ctrl_input_ice_path = ctrldir/ "ice" / INPUT_ICE_FNAME
 
     default_input_nml = {
         "coupling":
@@ -171,7 +173,7 @@ def default_input_ice(ice_control_directory):
 
 
 @pytest.fixture
-def fake_cice_in(ice_control_directory):
+def fake_cice_in(submodel_ctrl_dirs):
     # Create a fake cice_in.nml file. This is irrelevant for the tests,
     # however is required to exist for the experiment initialisation.
     fake_cice_in_nml = {
@@ -184,7 +186,7 @@ def fake_cice_in(ice_control_directory):
             "kmt_file": ""
         }
     }
-    fake_cice_in_path = ice_control_directory / "cice_in.nml"
+    fake_cice_in_path = ctrldir/ "ice" / "cice_in.nml"
     f90nml.write(fake_cice_in_nml, fake_cice_in_path)
 
     yield fake_cice_in_path
