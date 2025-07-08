@@ -450,8 +450,8 @@ def test_access_get_um_restart_datetime(um_only_config, remove_restart_dirs):
     the UM submodel is present.
     """
     # Create UM restart directory
-    date = datetime.datetime(100, 1, 1)
-    make_atmosphere_restart_dir("um.res.yaml", date,
+    date = cftime.datetime(100, 1, 1, calendar="proleptic_gregorian")
+    make_atmosphere_restart_dir(date,
                                 additional_path="atmosphere")
 
     with cd(ctrldir):
@@ -460,5 +460,4 @@ def test_access_get_um_restart_datetime(um_only_config, remove_restart_dirs):
 
     restart_path = list_expt_archive_dirs()[0]
     parsed_run_dt = expt.model.get_restart_datetime(restart_path)
-    assert parsed_run_dt == cftime.datetime(100, 1, 1,
-                                            calendar="proleptic_gregorian")
+    assert parsed_run_dt == date

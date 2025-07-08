@@ -170,10 +170,10 @@ class AccessEsm1p6(Model):
                     elif model.model_type == 'cice5':
                         # get_restart_datetime returns cftime objects, 
                         # convert to datetime
-                        model.run_start_date = model.get_restart_datetime()
+                        model.run_start_date = model.get_restart_datetime(model.prior_restart_path)
 
                         run_start_date_dt = datetime.fromisoformat(
-                            model.get_restart_datetime().isoformat()
+                            model.run_start_date.isoformat()
                         ).date()
 
                     # run_start_date must be after initialisation date
@@ -199,7 +199,8 @@ class AccessEsm1p6(Model):
                 else:
                     previous_runtime = 0
                     cpl_group['jobnum'] = 1
-                    model.run_start_date = init_date
+                    run_start_date_dt = init_date
+                    model.run_start_date = cal.date_to_cftime(init_date, cal.CALNAME[model.caltype])
 
                 # Set runtime for this run. 
                 if self.expt.runtime:
@@ -330,24 +331,15 @@ class AccessEsm1p6(Model):
     def check_restart_date_consistency(self):
         """Check submodel restart dates for consistency."""
         for model in self.expt.models:
-            if model.model_type == self.model_type:
-                # access-esm1.6 driver model has no restart files
-                continue
-            if model.run_start_date is not None:
-                # Start date calculated elsewhere
-                continue
-            if not model.prior_restart_path:
-                # TODO: How to handle this case?
-                warnings.warn("Skipping restart date consistency check for "
-                              f"{model.model_type} submodel:\n"
-                              "No prior restart path.")
-                continue
-            try:
-                model.run_start_date = model.get_restart_datetime(model.prior_restart_path)
-            except NotImplementedError:
-                warnings.warn("Skipping restart date consistency check for "
-                              f"{model.model_type} submodel:\n"
-                              "No get_restart_datetime method.")
+            if model.model_type == "cice" or model.model_type == "cice5":
+                # Run start date should already be set during setup
+                if model.run_start_date is None:
+                    raise RuntimeError("CICE restart date unset.")
+            elif model.model_type == "mom" or model.model_type == "um":
+                if model.prior_restart_path:
+                    model.run_start_date = model.get_restart_datetime(model.prior_restart_path)
+                else:
+                    raise RuntimeError(f"Missing prior restart for {model.model_type} submodel")
 
         # Check consistency
         start_dates = set(model.run_start_date

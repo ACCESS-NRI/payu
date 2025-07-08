@@ -20,8 +20,11 @@ from test.common import list_expt_archive_dirs, remove_expt_archive_dirs
 from test.models.test_cice5 import make_cice5_restart_dir
 from test.models.test_mom_mixin import make_ocean_restart_dir
 from test.models.test_um import make_atmosphere_restart_dir
+
+from payu.calendar import GREGORIAN, NOLEAP
 verbose = True
 
+INPUT_ICE_FNAME = "input_ice.nml"
 
 def setup_module(module):
     """
@@ -59,6 +62,7 @@ CICE5_CONFIG = {
     "experiment": ctrldir_basename,
     "metadata": {"enable": False}
 }
+
 
 @pytest.fixture
 def config(request):
@@ -133,6 +137,7 @@ def esm1p6_um_only_config():
     # Teardown
     os.remove(config_path)
 
+
 @pytest.fixture
 def ice_control_directory():
     # Make a cice control subdirectory
@@ -144,6 +149,25 @@ def ice_control_directory():
 
     # Teardown
     shutil.rmtree(ice_ctrl_dir)
+
+
+@pytest.fixture
+def default_input_ice(ice_control_directory):
+    # Create base input_ice.nml namelist as needed for setup
+    ctrl_input_ice_path = ice_control_directory / INPUT_ICE_FNAME
+
+    default_input_nml = {
+        "coupling":
+        {
+            "jobnum": 2,
+        }
+    }
+    f90nml.write(default_input_nml, ctrl_input_ice_path)
+
+    # Run test
+    yield ctrl_input_ice_path
+
+    # Teardown handled by ice_control_directory fixture
 
 
 @pytest.fixture
@@ -228,6 +252,7 @@ def test_esm1p6_patch_optional_config_files(um_only_ctrl_dir,
         set(um_standalone_model.optional_config_files).union(expected_files)
     )
 
+
 @pytest.mark.parametrize("config",
                         [CICE5_CONFIG],
                         indirect=True)
@@ -235,7 +260,7 @@ def test_esm1p6_patch_optional_config_files(um_only_ctrl_dir,
     [cftime.datetime(1, 1, 1, calendar="proleptic_gregorian"),
      cftime.datetime(999, 1, 1, calendar="proleptic_gregorian")]
 )
-def test_resdate_consistency(run_dt, config, fake_cice_in):
+def test_resdate_consistency(run_dt, config, fake_cice_in, default_input_ice):
     """
     Test that the ESM1.6 consistency date check passes when
     submodels use the same restart dates.
@@ -243,22 +268,94 @@ def test_resdate_consistency(run_dt, config, fake_cice_in):
     # Setup the restart files for each submodel
     make_cice5_restart_dir(run_dt,
                            additional_path="ice")
-    start_dt = cftime.datetime(1900, 1, 1, calendar="proleptic_gregorian")
-
+    start_dt = cftime.datetime(1, 1, 1, calendar="proleptic_gregorian")
     make_ocean_restart_dir(start_dt, run_dt,  additional_path="ocean")
-    make_atmosphere_restart_dir("um.res.yaml",
-                                datetime.date(run_dt.year, run_dt.month, run_dt.day),
+    make_atmosphere_restart_dir(run_dt,
                                 additional_path="atmosphere")
 
     # Initialise the experiment
     with cd(ctrldir):
         lab = payu.laboratory.Laboratory(lab_path=str(labdir))
         expt = payu.experiment.Experiment(lab, reproduce=False)
-
-    # Set cice5 calendar type to avoid needing to run model setup
     for model in expt.models:
         if model.model_type == "cice5":
-            model.cal_str = "proleptic_gregorian"
+            cice5_model = model
+    access_esm1p6_model = expt.model
 
-    expt.model.check_restart_date_consistency()
-    print("ALL OK")
+    # Required for model setup
+    expt.runtime = {"years": 1,
+                    "months": 0,
+                    "days": 0}
+
+    # Overwrite cice model paths created during experiment initialisation.
+    cice5_model.work_path = workdir
+
+    # Setup requirements for the CICE5 model. Apply these manually
+    # to avoid running the CICE5 setup
+    shutil.copy(default_input_ice, cice5_model.work_path)
+    cice5_model.caltype = GREGORIAN
+    cice5_model.cal_str = "proleptic_gregorian"
+
+    access_esm1p6_model.setup()
+
+
+@pytest.mark.parametrize("config",
+                         [CICE5_CONFIG],
+                         indirect=True)
+@pytest.mark.parametrize("cice_dt,um_dt,mom_dt",
+    [
+     (
+        cftime.datetime(1, 1, 1, calendar="proleptic_gregorian"),
+        cftime.datetime(1, 1, 1, calendar="proleptic_gregorian"),
+        cftime.datetime(1, 1, 2, calendar="proleptic_gregorian")
+     ),
+     (
+        cftime.datetime(5555, 7, 3, calendar="proleptic_gregorian"),
+        cftime.datetime(5555, 7, 1, calendar="proleptic_gregorian"),
+        cftime.datetime(5555, 7, 3, calendar="proleptic_gregorian")
+     ),
+     (
+        cftime.datetime(101, 12, 29, calendar="proleptic_gregorian"),
+        cftime.datetime(101, 11, 29, calendar="proleptic_gregorian"),
+        cftime.datetime(101, 11, 29, calendar="proleptic_gregorian")
+     ),
+     ]
+)
+def test_resdate_inconsistent(cice_dt, um_dt, mom_dt, config, fake_cice_in, default_input_ice):
+    """
+    Test that the ESM1.6 consistency date check fails when given inconsistent
+    dates.
+    """
+    # Setup the restart files for each submodel
+    make_cice5_restart_dir(cice_dt,
+                           additional_path="ice")
+    start_dt = cftime.datetime(1, 1, 1, calendar="proleptic_gregorian")
+    make_ocean_restart_dir(start_dt, mom_dt,  additional_path="ocean")
+    make_atmosphere_restart_dir(um_dt,
+                                additional_path="atmosphere")
+
+    # Initialise the experiment
+    with cd(ctrldir):
+        lab = payu.laboratory.Laboratory(lab_path=str(labdir))
+        expt = payu.experiment.Experiment(lab, reproduce=False)
+    for model in expt.models:
+        if model.model_type == "cice5":
+            cice5_model = model
+    access_esm1p6_model = expt.model
+
+    # Required for model setup
+    expt.runtime = {"years": 1,
+                    "months": 0,
+                    "days": 0}
+
+    # Overwrite cice model paths created during experiment initialisation.
+    cice5_model.work_path = workdir
+
+    # Setup requirements for the CICE5 model. Apply these manually
+    # to avoid running the CICE5 setup
+    shutil.copy(default_input_ice, cice5_model.work_path)
+    cice5_model.caltype = GREGORIAN
+    cice5_model.cal_str = "proleptic_gregorian"
+
+    with pytest.raises(RuntimeError, match="Inconsistent dates"):
+        access_esm1p6_model.setup()
