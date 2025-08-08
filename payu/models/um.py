@@ -28,6 +28,7 @@ import payu.calendar as cal
 # UM in access always uses proleptic gregorian calendar
 UM_CFTIME_CALENDAR = "proleptic_gregorian"
 
+
 class UnifiedModel(Model):
 
     def __init__(self, expt, name, config):
@@ -47,9 +48,9 @@ class UnifiedModel(Model):
             ]
         self.optional_config_files.extend(['input_atm.nml', 'parexe'])
 
-        # Input files which should be patched into the UM namelist file
-        self.input_namelists = [
-            "static_mmrs"
+        # Namelist files to patch into the main UM namelist
+        self.namelist_patches = [
+            "forcing.nml"
         ]
 
         self.restart = 'restart_dump.astart'
@@ -204,7 +205,7 @@ class UnifiedModel(Model):
             work_nml['NLSTCALL']['RUN_TARGET_END'] = run_runtime
             work_nml['STSHCOMP']['RUN_TARGET_END'] = run_runtime
 
-        self.patch_input_namelists(work_nml)
+        self.patch_namelists(work_nml)
 
         work_nml.write(work_nml_path, force=True)
 
@@ -260,22 +261,21 @@ class UnifiedModel(Model):
         # Payu UM always uses proleptic Gregorian calendar
         return cal.date_to_cftime(restart_date, UM_CFTIME_CALENDAR)
 
-    def patch_input_namelists(self, work_nml):
+    def patch_namelists(self, work_nml):
         """
-        Sections of the main UM namelist have been split into separate input files.
-        Patch these separate files back into the main namelist.
+        Forcing values have been split into separate files to ease namelist
+        management accross configurations. Patch the separate forcing namelists
+        back into the main UM namelist
 
         Parameters:
         -----------
         work_nml: f90nml Namelist (modifies in place)
         """
-        for input_namelist in self.input_namelists:
-            input_nml_path = os.path.join(self.work_input_path, input_namelist)
-            if os.path.isfile(input_nml_path):
-                patch_values = f90nml.read(input_nml_path)
+        for nml in self.namelist_patches:
+            nml_path = os.path.join(self.control_path, nml)
+            if os.path.isfile(nml_path):
+                patch_values = f90nml.read(nml_path)
                 work_nml.patch(patch_values)
-
-
 
 
 def date_to_um_dump_date(date):
