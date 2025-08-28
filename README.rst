@@ -1,21 +1,16 @@
-Payu
+ACCESS-NRI Payu fork
 ====
 
-.. image:: https://github.com/payu-org/payu/actions/workflows/CI.yml/badge.svg
-    :target: https://github.com/payu-org/payu/actions/workflows/CI.yml
-.. image:: https://github.com/payu-org/payu/actions/workflows/CD.yml/badge.svg
-    :target: https://github.com/payu-org/payu/actions/workflows/CD.yml
-.. image:: https://coveralls.io/repos/github/payu-org/payu/badge.svg?branch=master&killcache=1
-    :target: https://coveralls.io/github/payu-org/payu?branch=master
-.. image:: https://readthedocs.org/projects/docs/badge/?version=latest
-    :target: https://payu.readthedocs.io/en/latest/
+This is a fork of payu for shared ACCESS-NRI development work.
 
-Payu is a climate model workflow management tool for supercomputing
-environments.
+DO NOT SYNC THIS REPO.
 
-Payu is currently only configured for use on computing clusters maintained by
-NCI (National Computational Infrastructure) in Australia.
+A typical development flow is to add this fork as a remote, push feature branches here and then create a PR to https://github.com/payu-org/payu
 
-See the documentation_ for more details.
+This has the advantage of allowing shared development of a PR without needing to add all ACCESS-NRI staff and collaborators to the upstream payu-org/payu repo.
 
-.. _documentation: http://payu.readthedocs.org/en/latest/
+GitHub actions have been turned disabled, as have the wiki, projects and issues.
+
+Any issues should be created on the upstream payu repo.
+
+
