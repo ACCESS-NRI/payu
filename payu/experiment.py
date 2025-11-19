@@ -564,7 +564,7 @@ class Experiment(object):
 
     @timeit("payu_run_duration_seconds")
     def run(self, *user_flags):
-        self.load_modules()
+        #self.load_modules()
 
         f_out = open(self.stdout_fname, 'w')
         f_err = open(self.stderr_fname, 'w')
@@ -687,7 +687,7 @@ class Experiment(object):
             mpi_progs.append(' '.join(model_prog))
 
         # List all loaded environment modules
-        envmod.module("list")
+        # envmod.module("list")
 
         cmd = '{runcmd} {flags} {exes}'.format(
             runcmd=mpi_runcmd,
