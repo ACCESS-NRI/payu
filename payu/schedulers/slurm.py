@@ -35,6 +35,11 @@ class Slurm(Scheduler):
         pbs_flags.append('-A {project}'.format(project=pbs_project))
         pbs_flags.append('--time={}'.format(pbs_config.get('walltime')))
         pbs_flags.append('--ntasks={}'.format(pbs_config.get('ncpus')))
+        if pbs_config.get('npernode') is not None:
+            pbs_flags.append('--ntasks-per-node={}'.format(pbs_config.get('npernode')))
+        if pbs_config.get('queue') is not None:
+            pbs_flags.append('-p {}'.format(pbs_config.get('queue')))
+        pbs_flags.append('--exclusive')
 
         # Flags which need to be addressed
         # pbs_flags.append('--qos=debug')

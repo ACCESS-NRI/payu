@@ -660,8 +660,11 @@ class Experiment(object):
             model_npernode = model.config.get('npernode')
             # TODO: New Open MPI format?
             if model_npernode:
-                npernode_flag = ('-map-by ppr:{0}:node'
-                                  ''.format(model_npernode))
+                if self.config.get('scheduler') == 'slurm':
+                    npernode_flag = f'--ntasks-per-node {model_npernode}'
+                else:
+                    npernode_flag = ('-map-by ppr:{0}:node'
+                                    ''.format(model_npernode))
 
                 if self.config.get('scalasca', False):
                     npernode_flag = '\"{0}\"'.format(npernode_flag)
