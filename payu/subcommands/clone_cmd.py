@@ -26,6 +26,10 @@ parameters = {
         '    payu clone -s <commit_or_tag> -b <new_branch_name> <repository> <local_directory>\n'
         '\n  To clone and checkout a new branch, and specify a restart path to start from:\n'
         '    payu clone -b <new_branch_name> -r <path_to_restart_dir> <repository> <local_directory>\n'
+        '\n  To clone and checkout a new branch that adds a uuid to the branch name,'
+        'use the branch name as the experiment name: \n'
+        '    payu clone -u -b <new_branch_name> <repository> <local_directory>\n'
+
     ),
     'formatter_class': RawDescriptionHelpFormatter,
 }
@@ -34,7 +38,7 @@ arguments = [args.model, args.config, args.laboratory,
              args.keep_uuid, args.clone_branch,
              args.repository, args.local_directory,
              args.new_branch_name, args.restart_path,
-             args.parent_experiment, args.clone_start_point]
+             args.parent_experiment, args.clone_start_point, args.uuid_branch]
 
 
 def transform_strings_to_path(path_str=None):
@@ -43,7 +47,7 @@ def transform_strings_to_path(path_str=None):
 
 def runcmd(model_type, config_path, lab_path, keep_uuid,
            branch, repository, local_directory, new_branch_name, restart_path,
-           parent_experiment, start_point):
+           parent_experiment, start_point, uuid_branch):
     """Execute the command."""
     config_path = transform_strings_to_path(config_path)
     restart_path = transform_strings_to_path(restart_path)
@@ -60,7 +64,9 @@ def runcmd(model_type, config_path, lab_path, keep_uuid,
           new_branch_name=new_branch_name,
           restart_path=restart_path,
           parent_experiment=parent_experiment,
-          start_point=start_point)
+          start_point=start_point,
+          add_uuid_to_branch=uuid_branch
+          )
 
 
 runscript = runcmd

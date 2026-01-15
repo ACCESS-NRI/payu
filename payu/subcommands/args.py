@@ -191,6 +191,17 @@ clone_branch = {
     }
 }
 
+# Add UUID to branch name
+uuid_branch = {
+    'flags': ('--uuid-branch', '-u'),
+    'parameters': {
+        'action':   'store_true',
+        'dest': 'uuid_branch',
+        'default':  False,
+        'help': 'Append the experiment UUID to the new branch name'
+    }
+}
+
 # Clone branch
 clone_start_point = {
     'flags': ('--start-point', '-s'),

@@ -19,7 +19,7 @@ import git
 
 from payu.fsops import read_config, DEFAULT_CONFIG_FNAME, list_archive_dirs
 from payu.laboratory import Laboratory
-from payu.metadata import Metadata, UUID_FIELD, METADATA_FILENAME
+from payu.metadata import Metadata, UUID_FIELD, METADATA_FILENAME, generate_uuid, truncate_uuid
 from payu.git_utils import GitRepository, git_clone, PayuBranchError
 
 LAB_WRITE_ACCESS_ERROR = """
@@ -152,7 +152,8 @@ def checkout_branch(branch_name: str,
                     control_path: Optional[Path] = None,
                     model_type: Optional[str] = None,
                     lab_path: Optional[Path] = None,
-                    parent_experiment: Optional[str] = None) -> None:
+                    parent_experiment: Optional[str] = None,
+                    add_uuid_to_branch: bool = False) -> None:
     """Checkout branch, setup metadata and add symlinks
 
     Parameters
@@ -180,12 +181,23 @@ def checkout_branch(branch_name: str,
         Path to laboratory directory
     parent_experiment: Optional[str]
         Parent experiment UUID to add to generated metadata
+    add_uuid_to_branch: bool, default False
+        Add generated UUID to new branch name
     """
     if control_path is None:
         control_path = get_control_path(config_path)
 
     # Checkout branch
     repo = GitRepository(control_path)
+
+    # Generate new UUID and add to branch name if required
+    uuid = None
+    if is_new_branch and branch_name and add_uuid_to_branch:
+        uuid = generate_uuid()
+        branch_name = f"{branch_name}-{truncate_uuid(uuid)}"
+        # Flag to keep the generated ID
+        keep_uuid = True
+
     repo.checkout_branch(branch_name, is_new_branch, start_point)
 
     # Check config file exists on checked out branch
@@ -202,7 +214,8 @@ def checkout_branch(branch_name: str,
     # Initialise metadata
     metadata = Metadata(Path(lab.archive_path),
                         branch=branch_name,
-                        config_path=config_path)
+                        config_path=config_path,
+                        uuid=uuid)
 
     # Setup Metadata
     is_new_experiment = is_new_experiment or is_new_branch
@@ -259,7 +272,8 @@ def clone(repository: str,
           config_path: Optional[Path] = None,
           lab_path: Optional[Path] = None,
           restart_path: Optional[Path] = None,
-          parent_experiment: Optional[str] = None) -> None:
+          parent_experiment: Optional[str] = None,
+          add_uuid_to_branch: bool = False) -> None:
     """Clone an experiment control repository.
 
     Parameters:
@@ -287,6 +301,8 @@ def clone(repository: str,
             Restart path to start experiment from
         parent_experiment: Optional[str]
             Parent experiment UUID to add to generated metadata
+        add_uuid_to_branch: bool, default False
+            Add generated UUID to new branch name
 
     Returns: None
 
@@ -337,7 +353,8 @@ def clone(repository: str,
                             model_type=model_type,
                             lab_path=lab_path,
                             parent_experiment=parent_experiment,
-                            start_point=start_point)
+                            start_point=start_point,
+                            add_uuid_to_branch=add_uuid_to_branch)
         else:
             # Checkout branch
             if branch is None:
@@ -351,7 +368,8 @@ def clone(repository: str,
                             model_type=model_type,
                             lab_path=lab_path,
                             is_new_experiment=True,
-                            parent_experiment=parent_experiment)
+                            parent_experiment=parent_experiment,
+                            add_uuid_to_branch=add_uuid_to_branch)
     except PayuBranchError as e:
         # Remove directory if incomplete checkout
         shutil.rmtree(control_path)

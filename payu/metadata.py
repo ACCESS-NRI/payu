@@ -62,6 +62,9 @@ class Metadata:
             Flag to disable metadata and UUID generation and commits. The
             legacy name (control directory name) for experiments names
             in archive will be used instead.
+        uuid: Optional[str]
+            Pre-generated experiment uuid. If not provided, the uuid is read
+            from the metadata file if it exists.
     """
 
     def __init__(self,
@@ -69,7 +72,8 @@ class Metadata:
                  config_path: Optional[Path] = None,
                  branch: Optional[str] = None,
                  control_path: Optional[Path] = None,
-                 disabled: Optional[bool] = False) -> None:
+                 disabled: Optional[bool] = False,
+                 uuid: Optional[str] = None) -> None:
         self.config = read_config(config_path)
         self.metadata_config = self.config.get('metadata', {})
 
@@ -93,8 +97,13 @@ class Metadata:
 
         # Set uuid if in metadata file
         metadata = self.read_file()
-        self.uuid = metadata.get(UUID_FIELD, None)
-        self.uuid_updated = False
+        if uuid is not None:
+            self.uuid = uuid
+            # Flag to indicate uuid has been updated (so to update metadata file)
+            self.uuid_updated = True
+        else:
+            self.uuid = metadata.get(UUID_FIELD, None)
+            self.uuid_updated = False
 
     def read_file(self) -> CommentedMap:
         """Read metadata file - preserving orginal format if it exists"""
@@ -166,6 +175,7 @@ class Metadata:
         # Legacy experiment name
         legacy_name = self.control_path.name
 
+
         if not self.enabled:
             # Metadata/UUID generation is disabled, so leave UUID out of
             # experiment name
@@ -174,16 +184,26 @@ class Metadata:
                   f"Experiment name used for archival: {self.experiment_name}")
             return
 
-        branch_uuid_experiment_name = self.new_experiment_name()
-        if is_new_experiment or self.has_archive(branch_uuid_experiment_name):
-            # Use branch-UUID aware experiment name
-            self.experiment_name = branch_uuid_experiment_name
+        ctrl_branch_uuid_name = self.new_experiment_name()
+        # Check if branch name includes uuid
+        branch_incl_uuid = (
+            self.branch and self.branch.endswith(self.uuid[:TRUNCATED_UUID_LENGTH])
+        )
+        if branch_incl_uuid and (is_new_experiment or self.has_archive(self.branch)):
+            # Branch name already includes UUID - use it as experiment name
+            self.experiment_name = self.branch
+        elif is_new_experiment or self.has_archive(ctrl_branch_uuid_name):
+            # Use ctrl-branch-UUID aware experiment name
+            self.experiment_name = ctrl_branch_uuid_name
         elif self.has_archive(legacy_name):
             # Use legacy CONTROL-DIR experiment name
             self.experiment_name = legacy_name
+        elif keep_uuid and branch_incl_uuid:
+            # Use same experiment UUID and use branch name for archive
+            self.experiment_name = self.branch
         elif keep_uuid:
-            # Use same experiment UUID and use branch-UUID name for archive
-            self.experiment_name = branch_uuid_experiment_name
+            # Use same experiment UUID and use ctrl-branch-UUID name for archive
+            self.experiment_name = ctrl_branch_uuid_name
         else:
             # No archive exists - Detecting new experiment
             warnings.warn(
@@ -377,3 +397,7 @@ def add_template_metadata_values(metadata: CommentedMap) -> None:
 def generate_uuid() -> str:
     """Generate a new uuid"""
     return str(uuid.uuid4())
+
+def truncate_uuid(full_uuid: str) -> str:
+    """Return truncated uuid"""
+    return full_uuid[:TRUNCATED_UUID_LENGTH]
