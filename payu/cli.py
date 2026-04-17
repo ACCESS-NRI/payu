@@ -27,6 +27,7 @@ from payu.schedulers import index as scheduler_index, DEFAULT_SCHEDULER_CONFIG
 import payu.subcommands
 from payu.logger import setup_logger
 import payu.subcommands.args as arg_templates
+import payu.errors as errors
 
 # Default configuration
 DEFAULT_CONFIG = 'config.yaml'
@@ -113,9 +114,7 @@ def get_model_type(model_type, config):
               'name.'.format(model_type))
 
     if model_type not in supported_models:
-        print('payu: error: Unknown model {0}'.format(model_type))
-        sys.exit(-1)
-
+        raise errors.PayuError(f'payu: Unknown model {model_type}')
 
 def set_env_vars(init_run=None, n_runs=None, lab_path=None, dir_path=None,
                  reproduce=False, force=False, force_prune_restarts=False,
