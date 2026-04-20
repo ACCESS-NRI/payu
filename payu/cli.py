@@ -44,6 +44,7 @@ def parse():
     arg_count = len(sys.argv)
     if '--stacktrace' in sys.argv:
         arg_count = arg_count - 1
+
     # Display help if no arguments are provided
     if arg_count == 1:
         parser.print_help()
@@ -55,7 +56,9 @@ def parse():
 
     # We pop --stacktrace here so it will not be propagated to runcmd() in subcommands
     stacktrace = args.pop('stacktrace')
+
     if not stacktrace:
+        
         # Force warnings.warn() to omit the source code line in the message
         warnings.formatwarning = (
             lambda message, category, filename, lineno, line=None: f"{message}"
